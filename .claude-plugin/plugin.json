@@ -1,0 +1,14 @@
+{
+  "name": "dimo",
+  "version": "0.1.0",
+  "description": "Query live telemetry from your DIMO-connected vehicle. Guides you from zero to real-time signals — no terminal required.",
+  "author": {
+    "name": "DIMO Network",
+    "email": "developers@dimo.zone",
+    "url": "https://dimo.zone"
+  },
+  "homepage": "https://docs.dimo.zone",
+  "repository": "https://github.com/DIMO-Network/dimo-plugin",
+  "license": "Apache-2.0",
+  "keywords": ["dimo", "vehicle", "telemetry", "iot", "web3"]
+}
