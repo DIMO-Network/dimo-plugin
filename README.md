@@ -21,7 +21,11 @@ The plugin guides you from zero to real-time vehicle signals: developer onboardi
 ## Installation
 
 ```bash
-claude plugin install github.com/DIMO-Network/dimo-plugin
+# 1. Add the DIMO marketplace (one-time)
+claude plugin marketplace add DIMO-Network/dimo-plugin
+
+# 2. Install the plugin
+claude plugin install dimo
 ```
 
 ## Usage
