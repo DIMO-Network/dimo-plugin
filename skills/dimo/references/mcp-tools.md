@@ -54,7 +54,7 @@ List signal names that have stored data for the vehicle.
 { "tokenId": 183644 }
 ```
 
-Optional: `"filter": { "source": "<DID>" }` to narrow by source.
+Optional: `"filter": { "source": "autopi" }` to narrow by source (`autopi`, `macaron`, `ruptela`, `smartcar`, `tesla`, `compass`).
 
 ---
 
@@ -65,7 +65,7 @@ Most recent value for each signal the vehicle reports.
 { "tokenId": 183644 }
 ```
 
-Optional: `"filter": { "source": "<DID>" }`
+Optional: `"filter": { "source": "autopi" }` (same source options as above)
 
 ---
 
@@ -75,25 +75,24 @@ Aggregated signal data over a date range. Use for trends, charts, and history qu
 ```json
 {
   "tokenId": 183644,
-  "signals": ["speed", "powertrainTractionBatteryStateOfChargeCurrent"],
-  "startTime": "2025-04-01T00:00:00Z",
-  "endTime": "2025-04-20T00:00:00Z",
-  "interval": "1h"
+  "from": "2025-04-01T00:00:00Z",
+  "to": "2025-04-20T00:00:00Z",
+  "interval": "1h",
+  "filter": {
+    "source": "autopi"
+  }
 }
 ```
 
-`signals` should only include names confirmed via `telemetry_get_available_signals`.
+`filter.source` is optional. Available sources: `autopi`, `macaron`, `ruptela`, `smartcar`, `tesla`, `compass`.
 
 ---
 
 ### telemetry_get_signals_snapshot
-Point-in-time snapshot of all accessible signals at a specific moment.
+Latest snapshot of all accessible signals for the vehicle.
 
 ```json
-{
-  "tokenId": 183644,
-  "at": "2025-04-19T12:00:00Z"
-}
+{ "tokenId": 183644 }
 ```
 
 ---
