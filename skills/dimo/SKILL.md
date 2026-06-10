@@ -1,7 +1,7 @@
 ---
 name: dimo
 description: This skill should be used when the user asks to "connect my DIMO vehicle", "query my vehicle data", "get vehicle telemetry", "check my car's battery", "see my vehicle signals", "show my car stats", "use DIMO", "query DIMO", or invokes /dimo. Guides users from zero to querying live telemetry from a DIMO-connected vehicle — 1-minute setup from the DIMO mobile app, automatic JWT handling, and real-time signal queries.
-version: 0.2.3
+version: 0.2.4
 allowed-tools: Bash, mcp__Claude_Preview__preview_start, mcp__Claude_Preview__preview_eval, mcp__Claude_Preview__preview_list
 ---
 
@@ -334,6 +334,10 @@ Use `preview_eval` to **append** a new `.signal-card` to `#signalsContent` after
 
 **Always show data age.** Every signal carries a `timestamp` (and snapshots a `lastSeen`). If the data is older than ~1 hour, say so in plain words next to the answer (e.g. *"last reported 3 weeks ago — the car hasn't sent data since"*). Never present stale values as the current state. For location answers, give a human-readable place (city/area) alongside coordinates when possible.
 
+### Vehicle commands (lock, unlock, charge)
+
+Supported via the Devices API with the same Vehicle JWT — endpoints and error mapping in `references/commands.md`. **Hard rule:** a command moves a real car. State the exact command and exact vehicle and wait for the user's confirmation in their next message before sending; one command per confirmation; never auto-retry an ambiguous or timed-out command. Requires privilege 2 on the grant; a 403 means re-share the vehicle in the DIMO app with command access.
+
 ### After the first successful query
 
 Tell the user setup is done for good — credentials are stored and tokens renew automatically — and show 3-4 example asks so they know what's possible, e.g.:
@@ -342,6 +346,7 @@ Tell the user setup is done for good — credentials are stored and tokens renew
 - "What's my battery / fuel level?"
 - "Show my trips from last week"
 - "Any fault codes on my car?"
+- "Lock my car" (confirmed before sending)
 
 ### Preview fully gone (preview_list shows nothing)
 
