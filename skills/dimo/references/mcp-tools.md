@@ -11,7 +11,13 @@ Content-Type: application/json
 Authorization: Bearer <VEHICLE_JWT>   ← required for all data tools
 ```
 
-`get_schema` is the only tool that works without a JWT.
+Obtain the Vehicle JWT from the bundled auth script — never ask the user for it:
+
+```bash
+JWT=$(node "$CLAUDE_PLUGIN_ROOT/scripts/dimo-auth.mjs" vehicle-jwt <TOKEN_ID>)
+```
+
+The script caches tokens and silently re-mints on expiry. `telemetry_get_schema` is the only tool that works without a JWT.
 
 ## Call Format
 
@@ -39,7 +45,7 @@ To inspect exact parameter schemas for any tool at runtime:
 ```bash
 curl -s -X POST "https://telemetry-api.dimo.zone/mcp" \
   -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"get_schema","arguments":{}},"id":1}'
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"telemetry_get_schema","arguments":{}},"id":1}'
 ```
 
 Use this when unsure of a tool's accepted parameters — never guess.
@@ -109,18 +115,18 @@ Good for understanding data coverage before running other queries.
 ---
 
 ### telemetry_get_trip_segments
-Trip and activity segments. Supports multiple detection methods:
-`ignition`, `frequency`, `CUSUM`, `idling`, `refuel`, `recharge`.
+Trip and activity segments. Supports multiple detection mechanisms (see below).
 
 ```json
 {
   "tokenId": 183644,
-  "startTime": "2025-04-01T00:00:00Z",
-  "endTime": "2025-04-20T00:00:00Z"
+  "from": "2025-04-01T00:00:00Z",
+  "to": "2025-04-20T00:00:00Z",
+  "mechanism": "ignitionDetection"
 }
 ```
 
-Optional: `"segmentType": "ignition"` to filter by detection method.
+`from`, `to`, and `mechanism` are required. Mechanisms: `ignitionDetection`, `frequencyAnalysis`, `changePointDetection`, `idling`, `refuel`, `recharge`.
 
 ---
 
@@ -130,10 +136,13 @@ Per-day driving activity summaries over a date range.
 ```json
 {
   "tokenId": 183644,
-  "startTime": "2025-04-01T00:00:00Z",
-  "endTime": "2025-04-20T00:00:00Z"
+  "from": "2025-04-01T00:00:00Z",
+  "to": "2025-04-20T00:00:00Z",
+  "mechanism": "ignitionDetection"
 }
 ```
+
+`from`, `to`, and `mechanism` are required (same mechanism values as trip segments). Optional: `"timezone"`. Heavy computation — use short date ranges.
 
 ---
 
@@ -143,10 +152,12 @@ Discrete events (e.g. faults, state changes) in a time range.
 ```json
 {
   "tokenId": 183644,
-  "startTime": "2025-04-01T00:00:00Z",
-  "endTime": "2025-04-20T00:00:00Z"
+  "from": "2025-04-01T00:00:00Z",
+  "to": "2025-04-20T00:00:00Z"
 }
 ```
+
+`from` and `to` are required.
 
 ---
 
@@ -187,6 +198,6 @@ Latest VIN verifiable credential for the vehicle.
 
 | HTTP / JSON-RPC error | Cause | Fix |
 |---|---|---|
-| 401 | Vehicle JWT expired or missing | Re-run Phase 2 JWT exchange |
+| 401 | Vehicle JWT expired or missing | Re-run `dimo-auth.mjs vehicle-jwt <tokenId>` (auto-refreshes) and retry |
 | Tool returns empty result | Signal not recorded for this vehicle | Confirm via `telemetry_get_available_signals` |
-| Parameter error | Wrong argument shape | Call `get_schema` to inspect tool definition |
+| Parameter error | Wrong argument shape | Call `telemetry_get_schema` (no JWT) to inspect tool definitions, or `tools/list` for exact input schemas |

@@ -1,8 +1,7 @@
 ---
 name: dimo
-description: This skill should be used when the user asks to "connect my DIMO vehicle", "query my vehicle data", "get vehicle telemetry", "check my car's battery", "see my vehicle signals", "show my car stats", "use DIMO", "query DIMO", or invokes /dimo. Guides users from zero to querying live telemetry from a DIMO-connected vehicle — covering developer onboarding, JWT exchange, and real-time signal queries.
-version: 0.1.0
-argument-hint: "[developer-jwt] [token-id]"
+description: This skill should be used when the user asks to "connect my DIMO vehicle", "query my vehicle data", "get vehicle telemetry", "check my car's battery", "see my vehicle signals", "show my car stats", "use DIMO", "query DIMO", or invokes /dimo. Guides users from zero to querying live telemetry from a DIMO-connected vehicle — 1-minute setup from the DIMO mobile app, automatic JWT handling, and real-time signal queries.
+version: 0.2.0
 allowed-tools: Bash, mcp__Claude_Preview__preview_start, mcp__Claude_Preview__preview_eval, mcp__Claude_Preview__preview_list
 ---
 
@@ -10,15 +9,15 @@ allowed-tools: Bash, mcp__Claude_Preview__preview_start, mcp__Claude_Preview__pr
 
 Guide users from zero to querying live data from their DIMO-connected vehicle.
 
-**Core principle:** The user should never need to touch the terminal. Use the preview tool to show forms and results, and run all API calls via Bash.
+**Core principle:** The user should never need to touch the terminal or handle a JWT. Credentials come from the DIMO mobile app once; the bundled auth script (`$CLAUDE_PLUGIN_ROOT/scripts/dimo-auth.mjs`) mints and refreshes all tokens silently. Use the preview tool to show forms and results, and run all API calls via Bash.
 
-**Data principle:** All vehicle data queries go through the DIMO Telemetry MCP endpoint (`POST https://telemetry-api.dimo.zone/mcp`) using the 10 defined MCP tools. Never write raw GraphQL or invent query structures. Consult `references/mcp-tools.md` for the full tool list, parameters, and curl format. Consult `references/signal-reference.md` for signal names and units when rendering results.
+**Data principle:** All vehicle data queries go through the DIMO Telemetry MCP endpoint (`POST https://telemetry-api.dimo.zone/mcp`) using the 10 defined MCP tools. Never write raw GraphQL against telemetry and never invent query structures. Consult `references/mcp-tools.md` for the full tool list, parameters, and curl format. Consult `references/signal-reference.md` for signal names and units when rendering results.
 
 ---
 
 ## Startup: Render the preview immediately
 
-Call `preview_list` first. If a DIMO preview is already running, skip `preview_start` entirely — do not re-render, it wipes all JS state and the displayed JWT. Only call `preview_start` with the HTML below if no preview exists. This is the first action before any text output or questions.
+Call `preview_list` first. If a DIMO preview is already running, skip `preview_start` entirely — do not re-render, it wipes all JS state. Only call `preview_start` with the HTML below if no preview exists. This is the first action before any text output or questions.
 
 ```html
 <!doctype html>
@@ -52,9 +51,8 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;
 .form-note{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.15em;color:var(--muted);margin-bottom:28px;border-left:3px solid #1a1a1a;padding-left:14px}
 .field-group{display:flex;flex-direction:column;gap:6px;margin-bottom:20px}
 .field-label{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.25em;color:var(--muted);text-transform:uppercase}
-textarea,input[type=number]{background:#000;color:#fff;border:1px solid #2a2a2a;padding:14px 16px;font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:.04em;width:100%;resize:vertical}
-textarea:focus,input[type=number]:focus{outline:none;border-color:var(--red)}
-textarea{min-height:120px}
+textarea{background:#000;color:#fff;border:1px solid #2a2a2a;padding:14px 16px;font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:.04em;width:100%;resize:vertical;min-height:48px}
+textarea:focus{outline:none;border-color:var(--red)}
 .btn-red{background:var(--red);color:#fff;border:none;padding:14px 28px;font-family:'Oswald',sans-serif;font-weight:700;font-style:italic;letter-spacing:.12em;cursor:pointer;text-transform:uppercase;font-size:14px;margin-top:8px}
 .btn-red:hover{background:var(--red-dim)}
 #jwtResult{margin-top:28px}
@@ -63,7 +61,6 @@ textarea{min-height:120px}
 .result-status{font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.15em;margin-bottom:14px}
 .status-ok{color:#7DD87D}
 .status-err{color:var(--red)}
-.result-jwt{background:#000;border:1px solid #222;color:#ddd;font-family:'JetBrains Mono',monospace;font-size:11px;padding:14px;width:100%;resize:none;letter-spacing:.03em;min-height:80px}
 .btn-ghost{background:transparent;border:1px solid #444;color:#ccc;padding:8px 18px;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.2em;cursor:pointer;margin-top:10px;text-transform:uppercase}
 .btn-ghost:hover{border-color:#888;color:#fff}
 #signalsContent{display:flex;flex-direction:column;gap:16px}
@@ -93,27 +90,31 @@ textarea{min-height:120px}
 <nav class="nav">
   <div class="logo"><span>DIMO</span><span class="x">×</span><span class="dimo">TELEMETRY</span></div>
   <div class="nav-tabs">
-    <button id="btn-jwt" class="tab active">JWT Exchange</button>
+    <button id="btn-jwt" class="tab active">Setup</button>
     <button id="btn-signals" class="tab" disabled>Signals</button>
   </div>
 </nav>
 <div id="pane-jwt">
   <div class="page-head">
     <div class="section-label"><span class="rule"></span><span class="label-text">Credentials</span></div>
-    <div class="display">Vehicle<br>Access.</div>
-    <p class="prose">Exchange your Developer JWT for a vehicle-scoped token.</p>
+    <div class="display">Connect<br>DIMO.</div>
+    <p class="prose">In the DIMO app: Account → Advanced settings → Developer API Key → Generate API key. Then paste the three values below.</p>
   </div>
   <div class="pane">
-    <p class="form-note">VALUES STAY LOCAL — USED ONLY TO CALL THE DIMO TOKEN EXCHANGE API.</p>
+    <p class="form-note">VALUES STAY ON THIS MACHINE — STORED IN ~/.dimo/credentials.env (CHMOD 600).</p>
     <div class="field-group">
-      <label class="field-label">Developer JWT</label>
-      <textarea id="devJwt" placeholder="Paste your Developer JWT here"></textarea>
+      <label class="field-label">DIMO_CLIENT_ID</label>
+      <textarea id="clientId" rows="1" placeholder="0x..."></textarea>
     </div>
     <div class="field-group">
-      <label class="field-label">Vehicle Token ID</label>
-      <input type="number" id="tokenId" placeholder="e.g. 183644"/>
+      <label class="field-label">DIMO_PRIVATE_KEY</label>
+      <textarea id="privateKey" rows="1" placeholder="0x... (tap the eye icon in the app to reveal, then copy)"></textarea>
     </div>
-    <button class="btn-red" id="submitBtn">Get Vehicle JWT</button>
+    <div class="field-group">
+      <label class="field-label">DIMO_DOMAIN</label>
+      <textarea id="domain" rows="1" placeholder="http://localhost:3000/callback"></textarea>
+    </div>
+    <button class="btn-red" id="submitBtn">Save credentials</button>
     <div id="jwtResult"></div>
   </div>
 </div>
@@ -148,21 +149,22 @@ document.getElementById('btn-signals').addEventListener('click',()=>{
 });
 document.getElementById('submitBtn').addEventListener('click',()=>{
   const btn=document.getElementById('submitBtn');
-  const devJwt=document.getElementById('devJwt').value.trim();
-  const tokenId=document.getElementById('tokenId').value.trim();
+  const clientId=document.getElementById('clientId').value.trim();
+  const privateKey=document.getElementById('privateKey').value.trim();
+  const domain=document.getElementById('domain').value.trim()||'http://localhost:3000/callback';
   const r=document.getElementById('jwtResult');
   r.textContent='';
-  if(!devJwt||!tokenId){
+  if(!clientId.startsWith('0x')||!privateKey.startsWith('0x')){
     const card=document.createElement('div');card.className='result-card';
     const msg=document.createElement('p');msg.className='result-status status-err';
-    msg.textContent='BOTH FIELDS ARE REQUIRED.';
+    msg.textContent='CLIENT ID AND PRIVATE KEY MUST START WITH 0x.';
     card.appendChild(msg);r.appendChild(card);return;
   }
-  window.__dimoFormData={devJwt,tokenId,submitted:true};
-  btn.textContent='EXCHANGING...';btn.disabled=true;btn.style.opacity='.6';
+  window.__dimoFormData={clientId,privateKey,domain,submitted:true};
+  btn.textContent='SAVED ✓';btn.disabled=true;btn.style.opacity='.6';
   const card=document.createElement('div');card.className='result-card';
   const msg=document.createElement('p');msg.className='result-status';msg.style.color='#8E8E8E';
-  msg.textContent='CREDENTIALS CAPTURED — CLAUDE IS EXCHANGING YOUR TOKEN';
+  msg.textContent='CREDENTIALS CAPTURED — SEND ANY MESSAGE TO CONTINUE';
   card.appendChild(msg);r.appendChild(card);
 });
 </script>
@@ -176,161 +178,119 @@ Once `preview_start` returns, run Phase 0 routing.
 
 ## Phase 0: Routing
 
-**First, check whether the user already supplied a Developer JWT and a Token ID** (e.g. pasted a JWT string and/or a numeric Token ID in their message). If both are present, skip all questions and go straight to Phase 2 — pre-fill the preview form via `preview_eval` and trigger the exchange. The routing questions exist only to gather what the user hasn't already provided.
+Check that Node.js is available, then run the auth status check:
 
-If credentials are missing, ask these questions in sequence in chat. Stop at the first "No":
+```bash
+command -v node >/dev/null || echo "NODE_MISSING"
+node "$CLAUDE_PLUGIN_ROOT/scripts/dimo-auth.mjs" status
+```
 
-1. **"Do you have a DIMO Developer License and a Developer JWT from the Developer Console?"**
-   - No → **Phase 1** (full onboarding)
-2. **"Have you shared your vehicle with your developer app and noted your vehicle's Token ID?"**
-   - No → **Phase 1, Step 5** (vehicle sharing only — skip steps 1–4)
-3. Both yes → **Phase 2**
+If Node is missing, tell the user plainly (no jargon): *"This plugin needs Node.js, a free runtime. Install it from [nodejs.org](https://nodejs.org) (LTS version), or with `brew install node` on a Mac, then come back and say 'continue'."* Do not proceed until `node` resolves.
+
+- `"credentials": true` → skip setup; enable the Signals tab (see Phase 3) and go to **Phase 2 (Vehicle discovery)**.
+- `"credentials": false` → **Phase 1 (Setup)**.
+
+Never ask the user for JWTs or token IDs — both are derived automatically.
 
 ---
 
-## Phase 1: Onboarding
+## Phase 1: Setup
 
-*Prose only — all steps happen in the DIMO Developer Console UI.*
+**Primary path — DIMO mobile app** (takes ~1 minute):
 
-**Step 1 — Sign in**
-Go to [https://console.dimo.org](https://console.dimo.org) and sign in or create an account.
+Tell the user:
 
-**Step 2 — Obtain a Developer License**
-Follow the console prompts to apply for and activate a Developer License.
+> Open the **DIMO app** → **Account** → **Advanced settings** → **Developer API Key** → **Generate API key**. The app shows a small one-time fee paid from your in-app DIMO balance — if your balance is too low, top it up in the app first. When the key appears, tap **Share all vehicles** so this license can read your cars. Then use the copy buttons and paste the three values (`DIMO_CLIENT_ID`, `DIMO_PRIVATE_KEY`, `DIMO_DOMAIN`) into the form on the left and press **Save credentials**.
+>
+> Tip for getting the values from phone to computer: on iPhone + Mac, copying in the app lets you paste directly on the Mac (Universal Clipboard). Otherwise AirDrop or message the values to yourself — and delete that message afterwards, the private key is a secret.
 
-**Step 3 — Create an app and set a redirect URI**
-Create a new application. Set the redirect URI to `http://localhost:3000/callback`. The console auto-generates a **Developer JWT** on save.
+Wait for the user's message, then read the captured values via `preview_eval`:
 
-**Step 4 — Copy your Developer JWT**
-Copy the Developer JWT and store it safely (e.g. a `.env` file or password manager).
-
-**Step 5 — Share your vehicle**
-
-Ask for the user's **Client ID** (shown next to the app in the console — looks like `0xabc123...`).
-
-Construct and display this URL as a clickable link:
-```
-https://login.dimo.org?clientId=<CLIENT_ID>&redirectUri=http%3A%2F%2Flocalhost%3A3000%2Fcallback&entryState=VEHICLE_MANAGER&permissions=11111111
-```
-
-Display this message: *"Click this link, sign in with your DIMO account, share the vehicle(s), and note the Token ID shown for each vehicle — you'll need it next."*
-
-→ Once the user has the Token ID, continue to Phase 2.
-
----
-
-## Phase 2: Vehicle JWT Exchange
-
-The Developer JWT identifies the developer app but does not grant vehicle data access. Exchange it for a **Vehicle JWT** scoped to a specific vehicle token ID.
-
-> ⚠️ The Vehicle JWT expires in ~10 minutes. Re-run this exchange any time a query returns 401.
-
-**Step 1 — The preview form**
-
-The preview was rendered at startup. Never re-render it from scratch.
-
-If the user pre-supplied both credentials, pre-fill the form and trigger the button via `preview_eval`:
-```javascript
-document.getElementById('devJwt').value = '<DEV_JWT>';
-document.getElementById('tokenId').value = '<TOKEN_ID>';
-document.getElementById('submitBtn').click();
-```
-
-Otherwise tell the user: *"Fill in your Developer JWT and Token ID, click **Get Vehicle JWT**, then send me any message."*
-
-**Step 2 — Read credentials and run the exchange via Bash**
-
-The preview sandbox blocks external HTTP — the button captures credentials in `window.__dimoFormData` but makes no network calls. Once the user responds, read the values:
 ```javascript
 window.__dimoFormData
 ```
 
-Then run the exchange via Bash:
+Install script dependencies if needed, then store the credentials:
+
 ```bash
-curl -s -X POST "https://token-exchange-api.dimo.zone/v1/tokens/exchange" \
-  -H "Authorization: Bearer <DEV_JWT>" \
+[ -d "$CLAUDE_PLUGIN_ROOT/scripts/node_modules" ] || npm install --prefix "$CLAUDE_PLUGIN_ROOT/scripts" --silent
+node "$CLAUDE_PLUGIN_ROOT/scripts/dimo-auth.mjs" setup \
+  --client-id '<CLIENT_ID>' --private-key '<PRIVATE_KEY>' --domain '<DOMAIN>'
+```
+
+Immediately clear the captured secret from the preview:
+
+```javascript
+delete window.__dimoFormData;
+```
+
+**Never echo the private key in chat output.** → Phase 2.
+
+<details>
+<summary>Fallback — no DIMO mobile app (Developer Console)</summary>
+
+1. Go to [https://console.dimo.org](https://console.dimo.org), sign in or create an account.
+2. Apply for and activate a Developer License; create an application with redirect URI `http://localhost:3000/callback`.
+3. Generate an API key (private key) for the license and note the Client ID.
+4. Paste the Client ID, private key, and redirect URI (as `DIMO_DOMAIN`) into the form as above.
+5. Vehicles must be shared manually: display this link (with the real Client ID) and have the user sign in and share:
+   `https://login.dimo.org?clientId=<CLIENT_ID>&redirectUri=http%3A%2F%2Flocalhost%3A3000%2Fcallback&entryState=VEHICLE_MANAGER&permissions=11111111`
+
+</details>
+
+---
+
+## Phase 2: Vehicle discovery
+
+Get the client ID from `status`, then query the public Identity API for vehicles shared with this license:
+
+```bash
+curl -s -X POST "https://identity-api.dimo.zone/query" \
   -H "Content-Type: application/json" \
-  -d '{"nftContractAddress":"0xbA5738a18d83D41847dfFbDC6101d37C69c9B0cF","privileges":[1,2,3,4,5,6,7,8],"tokenId":<TOKEN_ID>}'
+  -d '{"query":"{ vehicles(filterBy: {privileged: \"<CLIENT_ID>\"}, first: 100) { nodes { tokenId definition { make model year } } } }"}'
 ```
 
-**Step 3 — Inject the result into the preview**
+- **One vehicle** → use its `tokenId` silently.
+- **Multiple** → list them in chat (year make model + tokenId) and ask which to use.
+- **None** → the user hasn't shared vehicles with this license. Tell them: *open the DIMO app → Account → Advanced settings → Developer API Key → tap "Share all vehicles"*, then re-run this query. (Console fallback: the login.dimo.org sharing link from Phase 1.)
 
-On success, store the token in context and update the UI via `preview_eval` using safe DOM methods (no innerHTML):
-```javascript
-(()=>{
-  const token='<VEHICLE_JWT>';
-  const tokenId='<TOKEN_ID>';
-  window.__dimoVehicleJwt=token;
-  window.__dimoTokenId=tokenId;
-  const r=document.getElementById('jwtResult');
-  while(r.firstChild)r.removeChild(r.firstChild);
-  const card=document.createElement('div');card.className='result-card';
-  const lbl=document.createElement('p');lbl.className='result-label';lbl.textContent='VEHICLE JWT';
-  const st=document.createElement('p');st.className='result-status status-ok';st.textContent='VEHICLE JWT GENERATED — VALID FOR ~10 MINUTES';
-  const ta=document.createElement('textarea');ta.className='result-jwt';ta.readOnly=true;ta.value=token;ta.rows=4;
-  const cp=document.createElement('button');cp.className='btn-ghost';cp.textContent='COPY';
-  cp.addEventListener('click',()=>{navigator.clipboard.writeText(token);cp.textContent='COPIED';setTimeout(()=>cp.textContent='COPY',2000);});
-  card.append(lbl,st,ta,cp);r.appendChild(card);
-  const btn=document.getElementById('submitBtn');
-  btn.textContent='REFRESH JWT';btn.disabled=false;btn.style.opacity='1';
-  const btnSig=document.getElementById('btn-signals');
-  btnSig.disabled=false;
-  document.getElementById('pane-jwt').hidden=true;
-  document.getElementById('pane-signals').hidden=false;
-  document.getElementById('btn-jwt').classList.remove('active');
-  btnSig.classList.add('active');
-})()
-```
-
-On error, surface the message in the preview:
-```javascript
-(()=>{
-  const r=document.getElementById('jwtResult');
-  while(r.firstChild)r.removeChild(r.firstChild);
-  const card=document.createElement('div');card.className='result-card';
-  const msg=document.createElement('p');msg.className='result-status status-err';
-  msg.textContent='ERROR: <MESSAGE>';
-  card.appendChild(msg);r.appendChild(card);
-  const btn=document.getElementById('submitBtn');
-  btn.textContent='GET VEHICLE JWT';btn.disabled=false;btn.style.opacity='1';
-})()
-```
-
-**Source of truth:** After a successful exchange, store `devJwt`, `tokenId`, and `vehicleJwt` explicitly in your context. `window.__dimoVehicleJwt` is a convenience cache only — never read the JWT back from the preview window. The preview can restart or refresh at any time, wiping all JS state.
-
-**Never ask the user to re-paste or re-fill the form** if credentials exist anywhere in the conversation context.
-
-### Preview JS state loss (window vars gone, UI still visible)
-
-Do NOT call `preview_start` — the UI is still rendered. Just re-run the Bash exchange with credentials from context and inject the fresh token via `preview_eval`.
-
-### Preview fully gone (preview_list shows nothing)
-
-1. Call `preview_start` with the inline HTML template
-2. Re-run the Bash exchange immediately using `devJwt` and `tokenId` from context
-3. Inject the result via `preview_eval` — do not prompt the user for anything
-
-→ Proceed to Phase 3.
+→ Phase 3.
 
 ---
 
 ## Phase 3: Vehicle Queries via MCP
 
-Before querying, confirm the Vehicle JWT is in your context. Do not read it from `window.__dimoVehicleJwt` — that variable is unreliable across preview refreshes. If it is missing from context, follow the restart recovery steps in Phase 2.
+Enable the Signals tab and switch to it via `preview_eval` (once, after setup/discovery succeeds):
 
-All queries use the DIMO Telemetry MCP endpoint. See `references/mcp-tools.md` for the full tool reference, curl format, and parameter details.
+```javascript
+(()=>{
+  const b=document.getElementById('btn-signals');
+  b.disabled=false;
+  document.getElementById('pane-jwt').hidden=true;
+  document.getElementById('pane-signals').hidden=false;
+  document.getElementById('btn-jwt').classList.remove('active');
+  b.classList.add('active');
+})()
+```
 
-> ⚠️ If any query returns 401, the Vehicle JWT has expired. Re-run the Bash exchange silently using `devJwt` and `tokenId` already in context, then inject the new token into the preview via `preview_eval` and retry the query — do not ask the user to re-fill the form.
+All queries use the DIMO Telemetry MCP endpoint. The Bearer token always comes from the auth script — it caches Vehicle JWTs and silently re-mints the Developer JWT on expiry:
 
-**Never write raw GraphQL or invent query structures.** Use only the 10 defined MCP tools. If unsure of a tool's parameters, call `get_schema` (no JWT required) to introspect — see `references/mcp-tools.md`.
+```bash
+JWT=$(node "$CLAUDE_PLUGIN_ROOT/scripts/dimo-auth.mjs" vehicle-jwt <TOKEN_ID>)
+```
+
+> ⚠️ If any query returns 401, re-run the `vehicle-jwt` command (it refreshes expired tokens) and retry the query once. Never ask the user for tokens.
+
+**Never write raw GraphQL against telemetry or invent query structures.** Use only the 10 defined MCP tools. If a tool returns a parameter error, call `tools/list` (no JWT required) and read the tool's `inputSchema` — see `references/mcp-tools.md`.
 
 ### Step 1 — Discover available signals
 
 Always start with `telemetry_get_available_signals` to see what this specific vehicle reports:
 
 ```bash
+JWT=$(node "$CLAUDE_PLUGIN_ROOT/scripts/dimo-auth.mjs" vehicle-jwt <TOKEN_ID>)
 curl -s -X POST "https://telemetry-api.dimo.zone/mcp" \
-  -H "Authorization: Bearer <VEHICLE_JWT>" \
+  -H "Authorization: Bearer $JWT" \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"telemetry_get_available_signals","arguments":{"tokenId":<TOKEN_ID>}},"id":1}'
 ```
@@ -359,17 +319,34 @@ Only request signals the vehicle reported in `telemetry_get_available_signals`. 
 
 Use `preview_eval` to **append** a new `.signal-card` to `#signalsContent` after each query — never replace existing cards. Include the tool name, query timestamp, and formatted signal values with units.
 
+**Always show data age.** Every signal carries a `timestamp` (and snapshots a `lastSeen`). If the data is older than ~1 hour, say so in plain words next to the answer (e.g. *"last reported 3 weeks ago — the car hasn't sent data since"*). Never present stale values as the current state. For location answers, give a human-readable place (city/area) alongside coordinates when possible.
+
+### After the first successful query
+
+Tell the user setup is done for good — credentials are stored and tokens renew automatically — and show 3-4 example asks so they know what's possible, e.g.:
+
+- "Where is my car right now?"
+- "What's my battery / fuel level?"
+- "Show my trips from last week"
+- "Any fault codes on my car?"
+
+### Preview fully gone (preview_list shows nothing)
+
+Call `preview_start` with the inline HTML template, re-enable the Signals tab via the Phase 3 snippet, and continue. Credentials live on disk — never re-ask for them. Preview state loss only affects rendering, never auth.
+
 ---
 
 ## Error Reference
 
 | Error | Fix |
 |---|---|
-| 401 on MCP query | Vehicle JWT expired — re-run Phase 2 |
-| 401 on token exchange | Developer JWT invalid — re-copy from console |
+| 401 on MCP query | Re-run `dimo-auth.mjs vehicle-jwt <tokenId>` (auto-refreshes), retry once |
+| `submit_challenge failed` from script | API key rotated/revoked — app → Developer API Key → "Generate new key", re-run Phase 1 |
+| `generate_challenge failed` from script | `DIMO_CLIENT_ID`/`DIMO_DOMAIN` don't match a real license — re-copy from the app, re-run Phase 1 |
+| `token exchange failed` from script | Vehicle not shared with this license — app → "Share all vehicles" |
+| Empty vehicle list in Phase 2 | Same — share vehicles in the app, re-query |
 | Signal not in result | Confirm via `telemetry_get_available_signals` — vehicle may not report it |
-| Token ID not recognized | Confirm vehicle is shared with the developer app in the console |
-| Tool parameter error | Call `get_schema` (no JWT) to introspect tool definitions |
+| Tool parameter error | Call `tools/list` (no JWT) and follow the tool's `inputSchema` exactly |
 
 ---
 
