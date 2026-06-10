@@ -14,6 +14,7 @@ const CACHE_PATH = join(DIMO_DIR, 'jwt-cache.json');
 const AUTH_BASE = process.env.DIMO_AUTH_BASE_URL || 'https://auth.dimo.zone';
 const EXCHANGE_URL =
   process.env.DIMO_TOKEN_EXCHANGE_URL || 'https://token-exchange-api.dimo.zone/v1/tokens/exchange';
+const IDENTITY_URL = process.env.DIMO_IDENTITY_API_URL || 'https://identity-api.dimo.zone/query';
 const VEHICLE_NFT = '0xbA5738a18d83D41847dfFbDC6101d37C69c9B0cF';
 const ALL_PRIVILEGES = [1, 2, 3, 4, 5, 6, 7, 8];
 
@@ -82,7 +83,12 @@ function readCache() {
   }
 }
 
+export function pruneExpired(vehicleJwts) {
+  return Object.fromEntries(Object.entries(vehicleJwts || {}).filter(([, jwt]) => isLive(jwt)));
+}
+
 function writeCache(cache) {
+  cache.vehicleJwts = pruneExpired(cache.vehicleJwts);
   writeFileSync(CACHE_PATH, JSON.stringify(cache), { mode: 0o600 });
   chmodSync(CACHE_PATH, 0o600); // mode only applies on create; fix pre-existing files too
 }
@@ -235,6 +241,34 @@ function cmdSetup(argv) {
   console.log(JSON.stringify({ ok: true, credsPath: CREDS_PATH }));
 }
 
+// Lists vehicles shared with the stored license, via the public Identity API.
+// Lives here (not as a curl in the skill) so the GraphQL quoting is done once, safely.
+async function cmdVehicles() {
+  const creds = readCreds();
+  if (!creds) fail('No credentials. Run setup first.');
+  const query = `{ vehicles(filterBy: {privileged: "${creds.DIMO_CLIENT_ID}"}, first: 100) { nodes { tokenId definition { make model year } } } }`;
+  const res = await fetch(IDENTITY_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query }),
+  });
+  const text = await res.text();
+  let nodes;
+  try {
+    nodes = JSON.parse(text).data.vehicles.nodes;
+  } catch {
+    fail(`identity query failed: ${res.status} ${text.slice(0, 200)}`);
+  }
+  console.log(
+    JSON.stringify(
+      nodes.map((n) => ({
+        tokenId: n.tokenId,
+        name: [n.definition?.year, n.definition?.make, n.definition?.model].filter(Boolean).join(' '),
+      })),
+    ),
+  );
+}
+
 function cmdStatus() {
   const creds = readCreds();
   const cache = readCache();
@@ -250,9 +284,10 @@ function cmdStatus() {
 const [, , cmd, ...rest] = process.argv;
 if (cmd === 'setup') cmdSetup(rest);
 else if (cmd === 'status') cmdStatus();
+else if (cmd === 'vehicles') await cmdVehicles();
 else if (cmd === 'vehicle-jwt')
   await cmdVehicleJwt(rest.find((a) => !a.startsWith('--')), { refresh: rest.includes('--refresh') });
 // Bare import (e.g. from the test file) leaves cmd undefined and argv[1] as the
 // importer's path — only error when this file was actually invoked as a CLI.
 else if (cmd !== undefined || process.argv[1]?.endsWith('dimo-auth.mjs'))
-  fail('usage: dimo-auth.mjs <setup|status|vehicle-jwt [tokenId] [--refresh]>');
+  fail('usage: dimo-auth.mjs <setup|status|vehicles|vehicle-jwt [tokenId] [--refresh]>');

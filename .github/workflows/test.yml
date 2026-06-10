@@ -1,0 +1,22 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node --test dimo-auth.test.mjs
+        working-directory: scripts
+      - name: smoke-test CLI without credentials
+        run: |
+          set -e
+          HOME=$(mktemp -d) node scripts/dimo-auth.mjs status | grep '"credentials":false'
+          ! node scripts/dimo-auth.mjs bogus

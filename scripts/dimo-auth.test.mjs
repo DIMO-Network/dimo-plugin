@@ -7,7 +7,16 @@ import {
   isLive,
   normalizeHex,
   parseLackedPrivileges,
+  pruneExpired,
 } from './dimo-auth.mjs';
+
+test('pruneExpired drops dead JWTs, keeps live ones, tolerates empty input', () => {
+  const now = Math.floor(Date.now() / 1000);
+  const mk = (exp) => `e.${Buffer.from(JSON.stringify({ exp })).toString('base64url')}.s`;
+  const pruned = pruneExpired({ 1: mk(now - 100), 2: mk(now + 3600) });
+  assert.deepEqual(Object.keys(pruned), ['2']);
+  assert.deepEqual(pruneExpired(undefined), {});
+});
 
 test('normalizeHex adds 0x to raw hex, keeps prefixed, rejects junk', () => {
   const raw = 'a'.repeat(64);

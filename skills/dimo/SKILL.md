@@ -1,7 +1,7 @@
 ---
 name: dimo
 description: This skill should be used when the user asks to "connect my DIMO vehicle", "query my vehicle data", "get vehicle telemetry", "check my car's battery", "see my vehicle signals", "show my car stats", "use DIMO", "query DIMO", or invokes /dimo. Guides users from zero to querying live telemetry from a DIMO-connected vehicle — 1-minute setup from the DIMO mobile app, automatic JWT handling, and real-time signal queries.
-version: 0.2.1
+version: 0.2.2
 allowed-tools: Bash, mcp__Claude_Preview__preview_start, mcp__Claude_Preview__preview_eval, mcp__Claude_Preview__preview_list
 ---
 
@@ -255,13 +255,13 @@ If setup fails (bad value), tell the user what was wrong and re-enable the form 
 
 ## Phase 2: Vehicle discovery
 
-Get the client ID from `status`, then query the public Identity API for vehicles shared with this license:
+List the vehicles shared with this license (public Identity API, no JWT needed):
 
 ```bash
-curl -s -X POST "https://identity-api.dimo.zone/query" \
-  -H "Content-Type: application/json" \
-  -d '{"query":"{ vehicles(filterBy: {privileged: \"<CLIENT_ID>\"}, first: 100) { nodes { tokenId definition { make model year } } } }"}'
+node "${CLAUDE_PLUGIN_ROOT}/scripts/dimo-auth.mjs" vehicles
 ```
+
+Returns JSON like `[{"tokenId":183644,"name":"2025 Ram 1500"}]`.
 
 - **One vehicle** → use its `tokenId` silently.
 - **Multiple** → list them in chat (year make model + tokenId) and ask which to use.
