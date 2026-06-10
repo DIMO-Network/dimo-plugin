@@ -85,8 +85,19 @@ async function mintDevJwt(creds) {
     address: creds.DIMO_CLIENT_ID,
   });
   const chRes = await fetch(`${AUTH_BASE}/auth/web3/generate_challenge?${q}`, { method: 'POST' });
-  if (!chRes.ok) fail(`generate_challenge failed: ${chRes.status} ${await chRes.text()}`);
-  const { challenge, state } = await chRes.json();
+  const chText = await chRes.text();
+  let challenge, state;
+  try {
+    ({ challenge, state } = JSON.parse(chText));
+  } catch {
+    // The auth server renders an HTML page for unknown client_id/domain pairs.
+  }
+  if (!chRes.ok || !challenge || !state)
+    fail(
+      `generate_challenge failed (${chRes.status}). ` +
+        'Check that DIMO_CLIENT_ID and DIMO_DOMAIN match a license + redirect URI generated in the DIMO app.\n' +
+        chText.slice(0, 200),
+    );
   const signature = await new Wallet(creds.DIMO_PRIVATE_KEY).signMessage(challenge);
   const subRes = await fetch(`${AUTH_BASE}/auth/web3/submit_challenge`, {
     method: 'POST',
