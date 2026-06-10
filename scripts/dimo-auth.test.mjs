@@ -7,8 +7,16 @@ import {
   isLive,
   normalizeHex,
   parseLackedPrivileges,
+  privilegesFromSacdMask,
   pruneExpired,
 } from './dimo-auth.mjs';
+
+test('privilegesFromSacdMask decodes 2-bits-per-privilege masks', () => {
+  assert.deepEqual(privilegesFromSacdMask('0x3fffc'), [1, 2, 3, 4, 5, 6, 7, 8]);
+  assert.deepEqual(privilegesFromSacdMask('0x3f0c'), [1, 4, 5, 6]);
+  assert.deepEqual(privilegesFromSacdMask('0x0'), []);
+  assert.deepEqual(privilegesFromSacdMask('garbage'), []);
+});
 
 test('pruneExpired drops dead JWTs, keeps live ones, tolerates empty input', () => {
   const now = Math.floor(Date.now() / 1000);

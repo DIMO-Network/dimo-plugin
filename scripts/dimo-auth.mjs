@@ -62,10 +62,27 @@ export function normalizeHex(value, hexLen) {
 }
 
 // Token exchange rejects requests for privileges the grant doesn't include,
-// naming them like: "lacks permissions [7 8] for asset ...".
+// naming them like: "lacks permissions [7 8] for asset ...". Fallback only —
+// the primary path reads the grant from the Identity API (privilegesFromSacdMask).
 export function parseLackedPrivileges(body) {
   const m = body.match(/lacks permissions \[([\d\s]+)\]/);
   return m ? m[1].trim().split(/\s+/).map(Number) : [];
+}
+
+// SACD permissions are a hex bitmask with two bits per privilege: privilege i
+// occupies bits 2i and 2i+1 (e.g. 0x3f0c → [1, 4, 5, 6], 0x3fffc → [1..8]).
+export function privilegesFromSacdMask(hex) {
+  let mask;
+  try {
+    mask = BigInt(hex);
+  } catch {
+    return [];
+  }
+  const out = [];
+  for (let i = 1; i <= 8; i++) {
+    if (((mask >> BigInt(2 * i)) & 3n) === 3n) out.push(i);
+  }
+  return out;
 }
 
 function readCreds() {
@@ -174,6 +191,30 @@ async function cmdVehicleJwt(tokenIdArg, opts) {
     return;
   }
   const devJwt = await ensureDevJwt(creds, cache);
+  // Primary path: read the actual grant from the public Identity API and request
+  // exactly those privileges. Falls back to all 8 + the 403 retry below if the
+  // lookup fails (network blip, indexing lag).
+  const grantedPrivileges = async () => {
+    try {
+      const res = await fetch(IDENTITY_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `{ vehicle(tokenId: ${tokenId}) { sacds(first: 100) { nodes { grantee permissions expiresAt } } } }`,
+        }),
+      });
+      const nodes = (await res.json()).data.vehicle.sacds.nodes;
+      const grant = nodes.find(
+        (n) =>
+          n.grantee.toLowerCase() === creds.DIMO_CLIENT_ID.toLowerCase() &&
+          new Date(n.expiresAt).getTime() > Date.now(),
+      );
+      const privs = grant && privilegesFromSacdMask(grant.permissions);
+      return privs?.length ? privs : null;
+    } catch {
+      return null;
+    }
+  };
   const exchange = async (privileges) => {
     const res = await fetch(EXCHANGE_URL, {
       method: 'POST',
@@ -182,7 +223,7 @@ async function cmdVehicleJwt(tokenIdArg, opts) {
     });
     return { res, text: await res.text() };
   };
-  let privileges = ALL_PRIVILEGES;
+  let privileges = (await grantedPrivileges()) || ALL_PRIVILEGES;
   let { res, text } = await exchange(privileges);
   if (res.status === 403) {
     // Grant may cover fewer privileges than we ask for — drop the named ones and retry.
