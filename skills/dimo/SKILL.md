@@ -161,7 +161,7 @@ document.getElementById('submitBtn').addEventListener('click',()=>{
     card.appendChild(msg);r.appendChild(card);return;
   }
   window.__dimoFormData={clientId,privateKey,domain,submitted:true};
-  btn.textContent='SAVED — TELL CLAUDE';btn.disabled=true;btn.style.opacity='.6';
+  btn.textContent='SAVED ✓';btn.disabled=true;btn.style.opacity='.6';
   const card=document.createElement('div');card.className='result-card';
   const msg=document.createElement('p');msg.className='result-status';msg.style.color='#8E8E8E';
   msg.textContent='CREDENTIALS CAPTURED — SEND ANY MESSAGE TO CONTINUE';
@@ -200,7 +200,9 @@ Never ask the user for JWTs or token IDs — both are derived automatically.
 
 Tell the user:
 
-> Open the **DIMO app** → **Account** → **Advanced settings** → **Developer API Key** → **Generate API key**. There is a one-time DIMO fee paid from your in-app balance. When the key appears, tap **Share all vehicles** so this license can read your cars. Then use the copy buttons to paste the three values (`DIMO_CLIENT_ID`, `DIMO_PRIVATE_KEY`, `DIMO_DOMAIN`) into the form on the left and press **Save credentials**.
+> Open the **DIMO app** → **Account** → **Advanced settings** → **Developer API Key** → **Generate API key**. The app shows a small one-time fee paid from your in-app DIMO balance — if your balance is too low, top it up in the app first. When the key appears, tap **Share all vehicles** so this license can read your cars. Then use the copy buttons and paste the three values (`DIMO_CLIENT_ID`, `DIMO_PRIVATE_KEY`, `DIMO_DOMAIN`) into the form on the left and press **Save credentials**.
+>
+> Tip for getting the values from phone to computer: on iPhone + Mac, copying in the app lets you paste directly on the Mac (Universal Clipboard). Otherwise AirDrop or message the values to yourself — and delete that message afterwards, the private key is a secret.
 
 Wait for the user's message, then read the captured values via `preview_eval`:
 
@@ -316,6 +318,17 @@ Only request signals the vehicle reported in `telemetry_get_available_signals`. 
 ### Step 3 — Render results
 
 Use `preview_eval` to **append** a new `.signal-card` to `#signalsContent` after each query — never replace existing cards. Include the tool name, query timestamp, and formatted signal values with units.
+
+**Always show data age.** Every signal carries a `timestamp` (and snapshots a `lastSeen`). If the data is older than ~1 hour, say so in plain words next to the answer (e.g. *"last reported 3 weeks ago — the car hasn't sent data since"*). Never present stale values as the current state. For location answers, give a human-readable place (city/area) alongside coordinates when possible.
+
+### After the first successful query
+
+Tell the user setup is done for good — credentials are stored and tokens renew automatically — and show 3-4 example asks so they know what's possible, e.g.:
+
+- "Where is my car right now?"
+- "What's my battery / fuel level?"
+- "Show my trips from last week"
+- "Any fault codes on my car?"
 
 ### Preview fully gone (preview_list shows nothing)
 
