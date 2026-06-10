@@ -17,6 +17,13 @@ test('normalizeHex adds 0x to raw hex, keeps prefixed, rejects junk', () => {
   assert.equal(normalizeHex('a'.repeat(63), 64), null);
 });
 
+test('normalizeHex tolerates pasted whitespace, quotes, and KEY= prefixes', () => {
+  const raw = 'b'.repeat(64);
+  assert.equal(normalizeHex(` 0x${raw}\n`, 64), `0x${raw}`);
+  assert.equal(normalizeHex(`DIMO_PRIVATE_KEY=0x${raw}`, 64), `0x${raw}`);
+  assert.equal(normalizeHex(`"0x${raw}"`, 64), `0x${raw}`);
+});
+
 test('parseLackedPrivileges extracts missing privilege list from 403 body', () => {
   const body =
     '{"code":403,"message":"Address 0xb9 lacks permissions [7 8] for asset did:erc721:137:0xbA…:183644."}';

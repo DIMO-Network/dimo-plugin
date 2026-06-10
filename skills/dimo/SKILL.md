@@ -178,11 +178,14 @@ Once `preview_start` returns, run Phase 0 routing.
 
 ## Phase 0: Routing
 
-Run the auth status check first:
+Check that Node.js is available, then run the auth status check:
 
 ```bash
+command -v node >/dev/null || echo "NODE_MISSING"
 node "$CLAUDE_PLUGIN_ROOT/scripts/dimo-auth.mjs" status
 ```
+
+If Node is missing, tell the user plainly (no jargon): *"This plugin needs Node.js, a free runtime. Install it from [nodejs.org](https://nodejs.org) (LTS version), or with `brew install node` on a Mac, then come back and say 'continue'."* Do not proceed until `node` resolves.
 
 - `"credentials": true` → skip setup; enable the Signals tab (see Phase 3) and go to **Phase 2 (Vehicle discovery)**.
 - `"credentials": false` → **Phase 1 (Setup)**.
@@ -276,7 +279,7 @@ JWT=$(node "$CLAUDE_PLUGIN_ROOT/scripts/dimo-auth.mjs" vehicle-jwt <TOKEN_ID>)
 
 > ⚠️ If any query returns 401, re-run the `vehicle-jwt` command (it refreshes expired tokens) and retry the query once. Never ask the user for tokens.
 
-**Never write raw GraphQL against telemetry or invent query structures.** Use only the 10 defined MCP tools. If unsure of a tool's parameters, call `get_schema` (no JWT required) to introspect — see `references/mcp-tools.md`.
+**Never write raw GraphQL against telemetry or invent query structures.** Use only the 10 defined MCP tools. If a tool returns a parameter error, call `tools/list` (no JWT required) and read the tool's `inputSchema` — see `references/mcp-tools.md`.
 
 ### Step 1 — Discover available signals
 
@@ -330,7 +333,7 @@ Call `preview_start` with the inline HTML template, re-enable the Signals tab vi
 | `token exchange failed` from script | Vehicle not shared with this license — app → "Share all vehicles" |
 | Empty vehicle list in Phase 2 | Same — share vehicles in the app, re-query |
 | Signal not in result | Confirm via `telemetry_get_available_signals` — vehicle may not report it |
-| Tool parameter error | Call `get_schema` (no JWT) to introspect tool definitions |
+| Tool parameter error | Call `tools/list` (no JWT) and follow the tool's `inputSchema` exactly |
 
 ---
 

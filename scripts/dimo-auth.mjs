@@ -50,10 +50,14 @@ export function isLive(jwt, marginSec = 60) {
   return jwtExpiry(jwt) - marginSec > Date.now() / 1000;
 }
 
-// Accepts hex with or without 0x prefix (console keys ship raw, app keys prefixed).
+// Accepts hex with or without 0x prefix (console keys ship raw, app keys prefixed),
+// and tolerates common paste artifacts: whitespace, quotes, a leading `KEY=` label.
 export function normalizeHex(value, hexLen) {
-  const v = value?.startsWith('0x') ? value.slice(2) : value;
-  return v && new RegExp(`^[0-9a-fA-F]{${hexLen}}$`).test(v) ? `0x${v}` : null;
+  let v = (value || '').trim().replace(/^["']|["']$/g, '');
+  const eq = v.indexOf('=');
+  if (eq !== -1 && /^[A-Z_]+$/.test(v.slice(0, eq))) v = v.slice(eq + 1).trim();
+  if (v.startsWith('0x')) v = v.slice(2);
+  return new RegExp(`^[0-9a-fA-F]{${hexLen}}$`).test(v) ? `0x${v}` : null;
 }
 
 // Token exchange rejects requests for privileges the grant doesn't include,
