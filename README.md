@@ -1,21 +1,22 @@
 # DIMO Plugin for Claude Code
 
-Query live telemetry from your DIMO-connected vehicle — no terminal required.
+Query live telemetry from your DIMO-connected vehicle — no terminal, no console, no JWT copying.
 
-The plugin guides you from zero to real-time vehicle signals: developer onboarding, JWT exchange via an in-browser UI, and signal queries powered by the DIMO Telemetry API.
+The plugin guides you from zero to real-time vehicle signals: 1-minute credential setup from the DIMO mobile app, automatic JWT handling, and signal queries powered by the DIMO Telemetry API.
 
 ## Features
 
-- Step-by-step DIMO Developer Console onboarding
-- In-browser Vehicle JWT exchange (no copy-paste, auto-refreshable)
+- 1-minute setup from the DIMO mobile app (Account → Advanced settings → Developer API Key)
+- Automatic JWT handling — Developer and Vehicle JWTs are minted, cached, and refreshed locally; nothing to copy after setup
+- Auto-discovery of vehicles shared with your developer license
 - Live signal queries via the DIMO Telemetry MCP endpoint
 - Full signal reference (speed, battery, fuel, tire pressure, and 80+ more)
 - Dark-themed preview UI — results rendered directly in Claude Code
 
 ## Prerequisites
 
-- A [DIMO](https://dimo.zone) account with at least one connected vehicle
-- Access to the [DIMO Developer Console](https://console.dimo.org)
+- The [DIMO mobile app](https://dimo.org) with at least one connected vehicle (the [Developer Console](https://console.dimo.org) works as a fallback)
+- Node.js >= 20
 - Claude Code with the Claude Preview capability enabled
 
 ## Installation
@@ -35,21 +36,11 @@ Trigger the skill in any of these ways:
 - **Slash command:** `/dimo`
 - **Natural language:** "Query my DIMO vehicle data", "Check my car's battery", "Show my vehicle signals"
 
-If you already have a Developer JWT and Token ID, pass them directly:
-
-```
-/dimo <developer-jwt> <token-id>
-```
-
-The skill will skip onboarding questions and go straight to the JWT exchange.
-
 ## How it works
 
-1. **Onboarding** (first time) — Creates a DIMO developer app and shares your vehicle
-2. **JWT Exchange** — Trades your Developer JWT for a vehicle-scoped token via an in-browser form
-3. **Signal Queries** — Queries the DIMO Telemetry API using 10 structured MCP tools
-
-The Vehicle JWT expires every ~10 minutes. Re-submit the form in the JWT Exchange tab to refresh it.
+1. **Setup** (first time) — Generate a developer API key in the DIMO app, share your vehicles with one tap, paste three values into the in-browser form. Stored in `~/.dimo/credentials.env` (mode 600).
+2. **Auth** — A bundled script mints a Developer JWT from your key (web3 challenge flow) and exchanges it per-vehicle; tokens auto-refresh on expiry.
+3. **Signal Queries** — Queries the hosted DIMO Telemetry MCP endpoint using 10 structured tools.
 
 ## Links
 
