@@ -50,6 +50,19 @@ export function isLive(jwt, marginSec = 60) {
   return jwtExpiry(jwt) - marginSec > Date.now() / 1000;
 }
 
+// Accepts hex with or without 0x prefix (console keys ship raw, app keys prefixed).
+export function normalizeHex(value, hexLen) {
+  const v = value?.startsWith('0x') ? value.slice(2) : value;
+  return v && new RegExp(`^[0-9a-fA-F]{${hexLen}}$`).test(v) ? `0x${v}` : null;
+}
+
+// Token exchange rejects requests for privileges the grant doesn't include,
+// naming them like: "lacks permissions [7 8] for asset ...".
+export function parseLackedPrivileges(body) {
+  const m = body.match(/lacks permissions \[([\d\s]+)\]/);
+  return m ? m[1].trim().split(/\s+/).map(Number) : [];
+}
+
 function readCreds() {
   if (!existsSync(CREDS_PATH)) return null;
   const c = parseEnvFile(readFileSync(CREDS_PATH, 'utf8'));
@@ -140,11 +153,20 @@ async function cmdVehicleJwt(tokenIdArg) {
     return;
   }
   const devJwt = await ensureDevJwt(creds, cache);
-  const res = await fetch(EXCHANGE_URL, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${devJwt}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ nftContractAddress: VEHICLE_NFT, privileges: ALL_PRIVILEGES, tokenId }),
-  });
+  const exchange = (privileges) =>
+    fetch(EXCHANGE_URL, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${devJwt}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nftContractAddress: VEHICLE_NFT, privileges, tokenId }),
+    });
+  let privileges = ALL_PRIVILEGES;
+  let res = await exchange(privileges);
+  if (res.status === 403) {
+    // Grant may cover fewer privileges than we ask for — drop the named ones and retry.
+    const lacked = parseLackedPrivileges(await res.text());
+    privileges = privileges.filter((p) => !lacked.includes(p));
+    if (lacked.length && privileges.length) res = await exchange(privileges);
+  }
   if (!res.ok)
     fail(
       `token exchange failed: ${res.status} ${await res.text()}\n` +
@@ -163,11 +185,14 @@ function cmdSetup(argv) {
     const i = argv.indexOf(flag);
     return i !== -1 ? argv[i + 1] : undefined;
   };
-  const clientId = get('--client-id');
-  const privateKey = get('--private-key');
+  const clientId = normalizeHex(get('--client-id'), 40);
+  const privateKey = normalizeHex(get('--private-key'), 64);
   const domain = get('--domain') || 'http://localhost:3000/callback';
-  if (!clientId?.startsWith('0x') || !privateKey?.startsWith('0x'))
-    fail('usage: dimo-auth.mjs setup --client-id 0x.. --private-key 0x.. [--domain URL]');
+  if (!clientId || !privateKey)
+    fail(
+      'usage: dimo-auth.mjs setup --client-id 0x.. --private-key 0x.. [--domain URL]\n' +
+        'client-id must be a 20-byte hex address, private-key a 32-byte hex key (0x prefix optional).',
+    );
   mkdirSync(DIMO_DIR, { recursive: true, mode: 0o700 });
   writeFileSync(
     CREDS_PATH,

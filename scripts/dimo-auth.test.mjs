@@ -1,6 +1,28 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseEnvFile, serializeEnvFile, jwtExpiry, isLive } from './dimo-auth.mjs';
+import {
+  parseEnvFile,
+  serializeEnvFile,
+  jwtExpiry,
+  isLive,
+  normalizeHex,
+  parseLackedPrivileges,
+} from './dimo-auth.mjs';
+
+test('normalizeHex adds 0x to raw hex, keeps prefixed, rejects junk', () => {
+  const raw = 'a'.repeat(64);
+  assert.equal(normalizeHex(raw, 64), `0x${raw}`);
+  assert.equal(normalizeHex(`0x${raw}`, 64), `0x${raw}`);
+  assert.equal(normalizeHex('zz', 64), null);
+  assert.equal(normalizeHex('a'.repeat(63), 64), null);
+});
+
+test('parseLackedPrivileges extracts missing privilege list from 403 body', () => {
+  const body =
+    '{"code":403,"message":"Address 0xb9 lacks permissions [7 8] for asset did:erc721:137:0xbA…:183644."}';
+  assert.deepEqual(parseLackedPrivileges(body), [7, 8]);
+  assert.deepEqual(parseLackedPrivileges('no match'), []);
+});
 
 test('parseEnvFile parses KEY=VALUE lines, ignores comments/blanks', () => {
   const text = '# creds\nDIMO_CLIENT_ID=0xabc\n\nDIMO_DOMAIN=http://localhost:3000/callback\n';
