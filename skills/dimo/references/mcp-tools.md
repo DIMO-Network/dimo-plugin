@@ -144,6 +144,8 @@ Per-day driving activity summaries over a date range.
 
 `from`, `to`, and `mechanism` are required (same mechanism values as trip segments). Optional: `"timezone"`. Heavy computation — use short date ranges.
 
+> ⚠️ **Known issue (2026-06-10):** this tool and `telemetry_get_trip_segments` can hang or return an empty body even with valid params (tracked with the telemetry-api team). Always pass `--max-time 30` to curl; on an empty response, say trip/daily data is temporarily unavailable and answer from `telemetry_get_signals_time_series` instead — do not retry in a loop.
+
 ---
 
 ### telemetry_get_events
