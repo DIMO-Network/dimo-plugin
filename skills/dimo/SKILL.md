@@ -185,7 +185,7 @@ command -v node >/dev/null || echo "NODE_MISSING"
 node "$CLAUDE_PLUGIN_ROOT/scripts/dimo-auth.mjs" status
 ```
 
-If Node is missing, tell the user plainly (no jargon): *"This plugin needs Node.js, a free runtime. Install it from [nodejs.org](https://nodejs.org) (LTS version), or with `brew install node` on a Mac, then come back and say 'continue'."* Do not proceed until `node` resolves.
+If Node is missing, tell the user plainly (no jargon): *"One thing first: this plugin needs Node.js, which is free and takes a couple of minutes to install. Grab the LTS version from [nodejs.org](https://nodejs.org), or run `brew install node` if you use Homebrew on a Mac. Then come back and say 'continue'."* Do not proceed until `node` resolves.
 
 - `"credentials": true` → skip setup; enable the Signals tab (see Phase 3) and go to **Phase 2 (Vehicle discovery)**.
 - `"credentials": false` → **Phase 1 (Setup)**.
@@ -200,9 +200,9 @@ Never ask the user for JWTs or token IDs — both are derived automatically.
 
 Tell the user:
 
-> Open the **DIMO app** → **Account** → **Advanced settings** → **Developer API Key** → **Generate API key**. The app shows a small one-time fee paid from your in-app DIMO balance — if your balance is too low, top it up in the app first. When the key appears, tap **Share all vehicles** so this license can read your cars. Then use the copy buttons and paste the three values (`DIMO_CLIENT_ID`, `DIMO_PRIVATE_KEY`, `DIMO_DOMAIN`) into the form on the left and press **Save credentials**.
+> Open the DIMO app and go to **Account → Advanced settings → Developer API Key**, then tap **Generate API key**. The app shows a small one-time fee that comes out of your DIMO balance, so top up first if you're short. Once the key appears, tap **Share all vehicles**. That's the step that lets this plugin see your cars. Then copy each of the three values into the form on the left and hit **Save credentials**.
 >
-> Tip for getting the values from phone to computer: on iPhone + Mac, copying in the app lets you paste directly on the Mac (Universal Clipboard). Otherwise AirDrop or message the values to yourself — and delete that message afterwards, the private key is a secret.
+> Getting the values from your phone to this computer: on iPhone and Mac, copying in the app usually lets you paste straight on the Mac. Otherwise AirDrop them, or message them to yourself and delete that message afterwards. The private key is a real secret.
 
 Wait for the user's message, then read the captured values via `preview_eval`:
 

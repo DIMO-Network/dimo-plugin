@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "dimo",
-  "description": "Query live telemetry from your DIMO-connected vehicle. Guides you from developer onboarding to real-time signals — no terminal required.",
+  "description": "Ask Claude about your DIMO-connected car: location, battery, trips, fault codes.",
   "owner": {
     "name": "DIMO Network",
     "url": "https://github.com/DIMO-Network"
@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "dimo",
-      "description": "Connect your DIMO vehicle and query live telemetry signals via the DIMO Telemetry API.",
+      "description": "Connect your DIMO vehicle and ask about it in plain English. Live telemetry, one-minute setup.",
       "source": "./",
       "category": "productivity"
     }

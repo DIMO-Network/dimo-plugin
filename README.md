@@ -1,46 +1,42 @@
 # DIMO Plugin for Claude Code
 
-Query live telemetry from your DIMO-connected vehicle — no terminal, no console, no JWT copying.
+Ask Claude about your car. "Where's my car?", "How's the battery?", "Show me last week's trips." If your vehicle is connected to DIMO, this plugin answers from live telemetry.
 
-The plugin guides you from zero to real-time vehicle signals: 1-minute credential setup from the DIMO mobile app, automatic JWT handling, and signal queries powered by the DIMO Telemetry API.
+Setup takes about a minute and happens mostly in the DIMO mobile app. You paste three values once. After that, tokens renew themselves in the background and you just ask questions.
 
-## Features
+## What it does
 
-- 1-minute setup from the DIMO mobile app (Account → Advanced settings → Developer API Key)
-- Automatic JWT handling — Developer and Vehicle JWTs are minted, cached, and refreshed locally; nothing to copy after setup
-- Auto-discovery of vehicles shared with your developer license
-- Live signal queries via the DIMO Telemetry MCP endpoint
-- Full signal reference (speed, battery, fuel, tire pressure, and 80+ more)
-- Dark-themed preview UI — results rendered directly in Claude Code
+- Walks you through creating an API key in the DIMO app (it's under Account → Advanced settings → Developer API Key; yes, we know that's buried)
+- Finds the vehicles you've shared with that key automatically, so you never have to look up a token ID
+- Queries live signals through the DIMO Telemetry API: location, battery, fuel, tire pressure, trips, fault codes, and roughly 80 more
+- Handles the JWT minting and refreshing for you. You will never see a token, and that's the point.
+- Renders results in a dashboard view right inside Claude Code
 
-## Prerequisites
+## What you need
 
-- The [DIMO mobile app](https://dimo.org) with at least one connected vehicle (the [Developer Console](https://console.dimo.org) works as a fallback)
-- Node.js >= 20
-- Claude Code with the Claude Preview capability enabled
+- The DIMO mobile app with at least one connected vehicle. Heads up: creating the API key has a small one-time fee, paid from your in-app DIMO balance. If you don't have the app, the [Developer Console](https://console.dimo.org) works too, with a few extra steps.
+- Node.js 20 or newer
+- Claude Code with the Preview capability enabled
 
-## Installation
+## Install
 
 ```bash
-# 1. Add the DIMO marketplace (one-time)
+# Add the DIMO marketplace (one time)
 claude plugin marketplace add DIMO-Network/dimo-plugin
 
-# 2. Install the plugin
+# Install the plugin
 claude plugin install dimo
 ```
 
-## Usage
+## Using it
 
-Trigger the skill in any of these ways:
+Type `/dimo`, or just ask something like "check my car's battery." The first run walks you through setup. Every run after that goes straight to your data.
 
-- **Slash command:** `/dimo`
-- **Natural language:** "Query my DIMO vehicle data", "Check my car's battery", "Show my vehicle signals"
+## How it works under the hood
 
-## How it works
+Your API key lives in `~/.dimo/credentials.env` on your machine, readable only by you. A small bundled script signs a challenge with that key to get a Developer JWT, then trades it for short-lived per-vehicle tokens as queries need them. Expired tokens get replaced quietly. Nothing leaves your machine except the API calls to DIMO itself.
 
-1. **Setup** (first time) — Generate a developer API key in the DIMO app, share your vehicles with one tap, paste three values into the in-browser form. Stored in `~/.dimo/credentials.env` (mode 600).
-2. **Auth** — A bundled script mints a Developer JWT from your key (web3 challenge flow) and exchanges it per-vehicle; tokens auto-refresh on expiry.
-3. **Signal Queries** — Queries the hosted DIMO Telemetry MCP endpoint using 10 structured tools.
+If the key ever leaks or you lose the laptop, open the app and tap "Generate new key." The old one stops working and the new one takes its place after a quick re-setup.
 
 ## Links
 
@@ -50,4 +46,4 @@ Trigger the skill in any of these ways:
 
 ## License
 
-Apache-2.0 — Copyright © DIMO Network
+Apache-2.0, Copyright © DIMO Network
