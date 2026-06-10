@@ -1,7 +1,7 @@
 ---
 name: dimo
 description: This skill should be used when the user asks to "connect my DIMO vehicle", "query my vehicle data", "get vehicle telemetry", "check my car's battery", "see my vehicle signals", "show my car stats", "use DIMO", "query DIMO", or invokes /dimo. Guides users from zero to querying live telemetry from a DIMO-connected vehicle — 1-minute setup from the DIMO mobile app, automatic JWT handling, and real-time signal queries.
-version: 0.2.0
+version: 0.2.1
 allowed-tools: Bash, mcp__Claude_Preview__preview_start, mcp__Claude_Preview__preview_eval, mcp__Claude_Preview__preview_list
 ---
 
@@ -9,7 +9,7 @@ allowed-tools: Bash, mcp__Claude_Preview__preview_start, mcp__Claude_Preview__pr
 
 Guide users from zero to querying live data from their DIMO-connected vehicle.
 
-**Core principle:** The user should never need to touch the terminal or handle a JWT. Credentials come from the DIMO mobile app once; the bundled auth script (`$CLAUDE_PLUGIN_ROOT/scripts/dimo-auth.mjs`) mints and refreshes all tokens silently. Use the preview tool to show forms and results, and run all API calls via Bash.
+**Core principle:** The user should never need to touch the terminal or handle a JWT. Credentials come from the DIMO mobile app once; the bundled auth script (`${CLAUDE_PLUGIN_ROOT}/scripts/dimo-auth.mjs`) mints and refreshes all tokens silently. Use the preview tool to show forms and results, and run all API calls via Bash.
 
 **Data principle:** All vehicle data queries go through the DIMO Telemetry MCP endpoint (`POST https://telemetry-api.dimo.zone/mcp`) using the 10 defined MCP tools. Never write raw GraphQL against telemetry and never invent query structures. Consult `references/mcp-tools.md` for the full tool list, parameters, and curl format. Consult `references/signal-reference.md` for signal names and units when rendering results.
 
@@ -154,10 +154,11 @@ document.getElementById('submitBtn').addEventListener('click',()=>{
   const domain=document.getElementById('domain').value.trim()||'http://localhost:3000/callback';
   const r=document.getElementById('jwtResult');
   r.textContent='';
-  if(!clientId.startsWith('0x')||!privateKey.startsWith('0x')){
+  const okHex=(v,n)=>new RegExp('^(0x)?[0-9a-fA-F]{'+n+'}$').test(v.replace(/^["']|["']$/g,'').replace(/^[A-Z_]+=/,''));
+  if(!okHex(clientId,40)||!okHex(privateKey,64)){
     const card=document.createElement('div');card.className='result-card';
     const msg=document.createElement('p');msg.className='result-status status-err';
-    msg.textContent='CLIENT ID AND PRIVATE KEY MUST START WITH 0x.';
+    msg.textContent='CHECK THE VALUES — CLIENT ID IS 42 CHARS (0x + 40), PRIVATE KEY 66 (0x + 64). PASTE THE FULL VALUE.';
     card.appendChild(msg);r.appendChild(card);return;
   }
   window.__dimoFormData={clientId,privateKey,domain,submitted:true};
@@ -182,8 +183,11 @@ Check that Node.js is available, then run the auth status check:
 
 ```bash
 command -v node >/dev/null || echo "NODE_MISSING"
-node "$CLAUDE_PLUGIN_ROOT/scripts/dimo-auth.mjs" status
+[ -d "${CLAUDE_PLUGIN_ROOT}/scripts/node_modules" ] || npm install --prefix "${CLAUDE_PLUGIN_ROOT}/scripts" --silent
+node "${CLAUDE_PLUGIN_ROOT}/scripts/dimo-auth.mjs" status
 ```
+
+The dependency check runs every time because a plugin update resets the install directory; it is a no-op when `node_modules` already exists.
 
 If Node is missing, tell the user plainly (no jargon): *"One thing first: this plugin needs Node.js, which is free and takes a couple of minutes to install. Grab the LTS version from [nodejs.org](https://nodejs.org), or run `brew install node` if you use Homebrew on a Mac. Then come back and say 'continue'."* Do not proceed until `node` resolves.
 
@@ -210,12 +214,13 @@ Wait for the user's message, then read the captured values via `preview_eval`:
 window.__dimoFormData
 ```
 
-Install script dependencies if needed, then store the credentials:
+If the user pasted the three values directly in chat instead of using the form, use those — do not make them re-enter anything.
+
+Store the credentials, passing them as environment variables (keeps the private key out of `ps`-visible argv):
 
 ```bash
-[ -d "$CLAUDE_PLUGIN_ROOT/scripts/node_modules" ] || npm install --prefix "$CLAUDE_PLUGIN_ROOT/scripts" --silent
-node "$CLAUDE_PLUGIN_ROOT/scripts/dimo-auth.mjs" setup \
-  --client-id '<CLIENT_ID>' --private-key '<PRIVATE_KEY>' --domain '<DOMAIN>'
+DIMO_CLIENT_ID='<CLIENT_ID>' DIMO_PRIVATE_KEY='<PRIVATE_KEY>' DIMO_DOMAIN='<DOMAIN>' \
+  node "${CLAUDE_PLUGIN_ROOT}/scripts/dimo-auth.mjs" setup
 ```
 
 Immediately clear the captured secret from the preview:
@@ -224,7 +229,15 @@ Immediately clear the captured secret from the preview:
 delete window.__dimoFormData;
 ```
 
-**Never echo the private key in chat output.** → Phase 2.
+**Never echo the private key in chat output.**
+
+If setup fails (bad value), tell the user what was wrong and re-enable the form so they can correct it:
+
+```javascript
+(()=>{const b=document.getElementById('submitBtn');b.disabled=false;b.style.opacity='1';b.textContent='Save credentials';})()
+```
+
+→ Phase 2.
 
 <details>
 <summary>Fallback — no DIMO mobile app (Developer Console)</summary>
@@ -276,10 +289,10 @@ Enable the Signals tab and switch to it via `preview_eval` (once, after setup/di
 All queries use the DIMO Telemetry MCP endpoint. The Bearer token always comes from the auth script — it caches Vehicle JWTs and silently re-mints the Developer JWT on expiry:
 
 ```bash
-JWT=$(node "$CLAUDE_PLUGIN_ROOT/scripts/dimo-auth.mjs" vehicle-jwt <TOKEN_ID>)
+JWT=$(node "${CLAUDE_PLUGIN_ROOT}/scripts/dimo-auth.mjs" vehicle-jwt <TOKEN_ID>)
 ```
 
-> ⚠️ If any query returns 401, re-run the `vehicle-jwt` command (it refreshes expired tokens) and retry the query once. Never ask the user for tokens.
+> ⚠️ If any query returns 401, re-run with `vehicle-jwt <TOKEN_ID> --refresh` (forces new tokens even if the cache thinks they're valid — covers revoked keys and clock skew) and retry the query once. If it still fails, the key was likely rotated: route to the Error Reference. Never ask the user for tokens.
 
 **Never write raw GraphQL against telemetry or invent query structures.** Use only the 10 defined MCP tools. If a tool returns a parameter error, call `tools/list` (no JWT required) and read the tool's `inputSchema` — see `references/mcp-tools.md`.
 
@@ -288,7 +301,7 @@ JWT=$(node "$CLAUDE_PLUGIN_ROOT/scripts/dimo-auth.mjs" vehicle-jwt <TOKEN_ID>)
 Always start with `telemetry_get_available_signals` to see what this specific vehicle reports:
 
 ```bash
-JWT=$(node "$CLAUDE_PLUGIN_ROOT/scripts/dimo-auth.mjs" vehicle-jwt <TOKEN_ID>)
+JWT=$(node "${CLAUDE_PLUGIN_ROOT}/scripts/dimo-auth.mjs" vehicle-jwt <TOKEN_ID>)
 curl -s -X POST "https://telemetry-api.dimo.zone/mcp" \
   -H "Authorization: Bearer $JWT" \
   -H "Content-Type: application/json" \
@@ -340,7 +353,7 @@ Call `preview_start` with the inline HTML template, re-enable the Signals tab vi
 
 | Error | Fix |
 |---|---|
-| 401 on MCP query | Re-run `dimo-auth.mjs vehicle-jwt <tokenId>` (auto-refreshes), retry once |
+| 401 on MCP query | Re-run `dimo-auth.mjs vehicle-jwt <tokenId> --refresh`, retry once |
 | `submit_challenge failed` from script | API key rotated/revoked — app → Developer API Key → "Generate new key", re-run Phase 1 |
 | `generate_challenge failed` from script | `DIMO_CLIENT_ID`/`DIMO_DOMAIN` don't match a real license — re-copy from the app, re-run Phase 1 |
 | `token exchange failed` from script | Vehicle not shared with this license — app → "Share all vehicles" |

@@ -83,8 +83,8 @@ function readCache() {
 }
 
 function writeCache(cache) {
-  writeFileSync(CACHE_PATH, JSON.stringify(cache));
-  chmodSync(CACHE_PATH, 0o600);
+  writeFileSync(CACHE_PATH, JSON.stringify(cache), { mode: 0o600 });
+  chmodSync(CACHE_PATH, 0o600); // mode only applies on create; fix pre-existing files too
 }
 
 function fail(msg) {
@@ -93,7 +93,16 @@ function fail(msg) {
 }
 
 async function mintDevJwt(creds) {
-  const { Wallet } = await import('ethers');
+  let Wallet;
+  try {
+    ({ Wallet } = await import('ethers'));
+  } catch {
+    const scriptsDir = new URL('.', import.meta.url).pathname;
+    fail(
+      `Missing dependencies (a plugin update can reset them). Run:\n` +
+        `  npm install --prefix "${scriptsDir}" --silent\nthen retry.`,
+    );
+  }
   const q = new URLSearchParams({
     client_id: creds.DIMO_CLIENT_ID,
     domain: creds.DIMO_DOMAIN,
@@ -145,39 +154,51 @@ async function ensureDevJwt(creds, cache) {
   return cache.devJwt;
 }
 
-async function cmdVehicleJwt(tokenIdArg) {
+async function cmdVehicleJwt(tokenIdArg, opts) {
   const tokenId = Number.parseInt(tokenIdArg, 10);
-  if (!Number.isInteger(tokenId)) fail('usage: dimo-auth.mjs vehicle-jwt <tokenId>');
+  if (!Number.isInteger(tokenId)) fail('usage: dimo-auth.mjs vehicle-jwt <tokenId> [--refresh]');
   const creds = readCreds();
   if (!creds) fail('No credentials. Run setup first.');
   const cache = readCache();
+  // --refresh: skip caches after a server-side 401 (revoked key, clock skew).
+  if (opts.refresh) cache.devJwt = null;
   const cached = cache.vehicleJwts?.[tokenId];
-  if (cached && isLive(cached)) {
+  if (!opts.refresh && cached && isLive(cached)) {
     console.log(cached);
     return;
   }
   const devJwt = await ensureDevJwt(creds, cache);
-  const exchange = (privileges) =>
-    fetch(EXCHANGE_URL, {
+  const exchange = async (privileges) => {
+    const res = await fetch(EXCHANGE_URL, {
       method: 'POST',
       headers: { Authorization: `Bearer ${devJwt}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ nftContractAddress: VEHICLE_NFT, privileges, tokenId }),
     });
+    return { res, text: await res.text() };
+  };
   let privileges = ALL_PRIVILEGES;
-  let res = await exchange(privileges);
+  let { res, text } = await exchange(privileges);
   if (res.status === 403) {
     // Grant may cover fewer privileges than we ask for — drop the named ones and retry.
-    const lacked = parseLackedPrivileges(await res.text());
+    const lacked = parseLackedPrivileges(text);
     privileges = privileges.filter((p) => !lacked.includes(p));
-    if (lacked.length && privileges.length) res = await exchange(privileges);
+    if (lacked.length && privileges.length) {
+      console.error(`note: license lacks privileges [${lacked.join(', ')}]; retrying with [${privileges.join(', ')}]`);
+      ({ res, text } = await exchange(privileges));
+    }
   }
   if (!res.ok)
     fail(
-      `token exchange failed: ${res.status} ${await res.text()}\n` +
+      `token exchange failed: ${res.status} ${text}\n` +
         'Confirm the vehicle is shared with this license ("Share all vehicles" in the DIMO app).',
     );
-  const { token } = await res.json();
-  if (!token) fail('token exchange returned no token');
+  let token;
+  try {
+    ({ token } = JSON.parse(text));
+  } catch {
+    /* fall through to the check below */
+  }
+  if (!token) fail(`token exchange returned no token: ${text.slice(0, 200)}`);
   cache.vehicleJwts = cache.vehicleJwts || {};
   cache.vehicleJwts[tokenId] = token;
   writeCache(cache);
@@ -189,9 +210,11 @@ function cmdSetup(argv) {
     const i = argv.indexOf(flag);
     return i !== -1 ? argv[i + 1] : undefined;
   };
-  const clientId = normalizeHex(get('--client-id'), 40);
-  const privateKey = normalizeHex(get('--private-key'), 64);
-  const domain = get('--domain') || 'http://localhost:3000/callback';
+  // Values come from flags or, preferably, environment variables (keeps the
+  // private key out of argv / `ps` output).
+  const clientId = normalizeHex(get('--client-id') ?? process.env.DIMO_CLIENT_ID, 40);
+  const privateKey = normalizeHex(get('--private-key') ?? process.env.DIMO_PRIVATE_KEY, 64);
+  const domain = get('--domain') || process.env.DIMO_DOMAIN || 'http://localhost:3000/callback';
   if (!clientId || !privateKey)
     fail(
       'usage: dimo-auth.mjs setup --client-id 0x.. --private-key 0x.. [--domain URL]\n' +
@@ -205,8 +228,9 @@ function cmdSetup(argv) {
       DIMO_PRIVATE_KEY: privateKey,
       DIMO_DOMAIN: domain,
     }),
+    { mode: 0o600 },
   );
-  chmodSync(CREDS_PATH, 0o600);
+  chmodSync(CREDS_PATH, 0o600); // mode only applies on create; fix pre-existing files too
   writeCache({ devJwt: null, vehicleJwts: {} });
   console.log(JSON.stringify({ ok: true, credsPath: CREDS_PATH }));
 }
@@ -226,7 +250,9 @@ function cmdStatus() {
 const [, , cmd, ...rest] = process.argv;
 if (cmd === 'setup') cmdSetup(rest);
 else if (cmd === 'status') cmdStatus();
-else if (cmd === 'vehicle-jwt') await cmdVehicleJwt(rest[0]);
-else if (cmd !== undefined) fail('usage: dimo-auth.mjs <setup|status|vehicle-jwt>');
-else if (process.argv[1]?.endsWith('dimo-auth.mjs'))
-  fail('usage: dimo-auth.mjs <setup|status|vehicle-jwt>');
+else if (cmd === 'vehicle-jwt')
+  await cmdVehicleJwt(rest.find((a) => !a.startsWith('--')), { refresh: rest.includes('--refresh') });
+// Bare import (e.g. from the test file) leaves cmd undefined and argv[1] as the
+// importer's path — only error when this file was actually invoked as a CLI.
+else if (cmd !== undefined || process.argv[1]?.endsWith('dimo-auth.mjs'))
+  fail('usage: dimo-auth.mjs <setup|status|vehicle-jwt [tokenId] [--refresh]>');

@@ -14,7 +14,7 @@ Authorization: Bearer <VEHICLE_JWT>   ← required for all data tools
 Obtain the Vehicle JWT from the bundled auth script — never ask the user for it:
 
 ```bash
-JWT=$(node "$CLAUDE_PLUGIN_ROOT/scripts/dimo-auth.mjs" vehicle-jwt <TOKEN_ID>)
+JWT=$(node "${CLAUDE_PLUGIN_ROOT}/scripts/dimo-auth.mjs" vehicle-jwt <TOKEN_ID>)
 ```
 
 The script caches tokens and silently re-mints on expiry. `telemetry_get_schema` is the only tool that works without a JWT.
