@@ -6,7 +6,8 @@
 //   vehicle-jwt <tokenId>  → prints a valid Vehicle JWT to stdout
 import { mkdirSync, readFileSync, writeFileSync, chmodSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const DIMO_DIR = join(homedir(), '.dimo');
 const CREDS_PATH = join(DIMO_DIR, 'credentials.env');
@@ -120,7 +121,7 @@ async function mintDevJwt(creds) {
   try {
     ({ Wallet } = await import('ethers'));
   } catch {
-    const scriptsDir = new URL('.', import.meta.url).pathname;
+    const scriptsDir = dirname(fileURLToPath(import.meta.url));
     fail(
       `Missing dependencies (a plugin update can reset them). Run:\n` +
         `  npm install --prefix "${scriptsDir}" --silent\nthen retry.`,
@@ -284,30 +285,46 @@ function cmdSetup(argv) {
 
 // Lists vehicles shared with the stored license, via the public Identity API.
 // Lives here (not as a curl in the skill) so the GraphQL quoting is done once, safely.
+// Pages through the full set — a fleet license can hold far more than one page,
+// and a silent `first: 100` cap would hide vehicles from the user.
+export function vehiclesQuery(clientId, after) {
+  const cursor = after ? `, after: "${after}"` : '';
+  return `{ vehicles(filterBy: {privileged: "${clientId}"}, first: 100${cursor}) { totalCount pageInfo { hasNextPage endCursor } nodes { tokenId definition { make model year } } } }`;
+}
+
+export function vehicleName(node) {
+  return [node.definition?.year, node.definition?.make, node.definition?.model].filter(Boolean).join(' ');
+}
+
 async function cmdVehicles() {
   const creds = readCreds();
   if (!creds) fail('No credentials. Run setup first.');
-  const query = `{ vehicles(filterBy: {privileged: "${creds.DIMO_CLIENT_ID}"}, first: 100) { nodes { tokenId definition { make model year } } } }`;
-  const res = await fetch(IDENTITY_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query }),
-  });
-  const text = await res.text();
-  let nodes;
-  try {
-    nodes = JSON.parse(text).data.vehicles.nodes;
-  } catch {
-    fail(`identity query failed: ${res.status} ${text.slice(0, 200)}`);
+  const out = [];
+  let after = null;
+  let totalCount = 0;
+  // Bounded so a pagination bug can never spin forever.
+  for (let page = 0; page < 50; page++) {
+    const res = await fetch(IDENTITY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: vehiclesQuery(creds.DIMO_CLIENT_ID, after) }),
+    });
+    const text = await res.text();
+    let v;
+    try {
+      v = JSON.parse(text).data.vehicles;
+    } catch {
+      fail(`identity query failed: ${res.status} ${text.slice(0, 200)}`);
+    }
+    totalCount = v.totalCount ?? out.length + v.nodes.length;
+    for (const n of v.nodes) out.push({ tokenId: n.tokenId, name: vehicleName(n) });
+    if (!v.pageInfo?.hasNextPage) break;
+    after = v.pageInfo.endCursor;
   }
-  console.log(
-    JSON.stringify(
-      nodes.map((n) => ({
-        tokenId: n.tokenId,
-        name: [n.definition?.year, n.definition?.make, n.definition?.model].filter(Boolean).join(' '),
-      })),
-    ),
-  );
+  // Only reachable if the page bound above is hit; flagged so the skill never
+  // reports a total it did not actually enumerate.
+  const truncated = out.length < totalCount;
+  console.log(JSON.stringify({ totalCount, truncated, vehicles: out }));
 }
 
 function cmdStatus() {

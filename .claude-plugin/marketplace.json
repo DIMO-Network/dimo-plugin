@@ -1,6 +1,6 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "dimo",
+  "name": "dimo-vehicle",
   "description": "Ask Claude about your DIMO-connected car: location, battery, trips, fault codes.",
   "owner": {
     "name": "DIMO Network",

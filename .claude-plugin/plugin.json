@@ -1,6 +1,6 @@
 {
   "name": "dimo",
-  "version": "0.2.4",
+  "version": "0.3.0",
   "description": "Ask Claude where your car is, how the battery's doing, or what trips you took. Sets up in about a minute from the DIMO mobile app.",
   "author": {
     "name": "DIMO Network",

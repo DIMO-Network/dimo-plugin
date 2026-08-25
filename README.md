@@ -8,15 +8,14 @@ Setup takes about a minute and happens mostly in the DIMO mobile app. You paste 
 
 - Walks you through creating an API key in the DIMO app (it's under Account → Advanced settings → Developer API Key; yes, we know that's buried)
 - Finds the vehicles you've shared with that key automatically, so you never have to look up a token ID
-- Queries live signals through the DIMO Telemetry API: location, battery, fuel, tire pressure, trips, fault codes, and roughly 80 more
+- Queries live signals through the DIMO Telemetry API: location, battery, fuel, tire pressure, trips, fault codes, and 117 signals in total. It asks your specific car what it reports before querying, so you never get told about a sensor your car doesn't have.
 - Handles the JWT minting and refreshing for you. You will never see a token, and that's the point.
-- Renders results in a dashboard view right inside Claude Code
+- Renders results in a dashboard view when Claude Code's preview capability is available, and in plain chat when it isn't — both work the same
 
 ## What you need
 
 - The DIMO mobile app with at least one connected vehicle. Heads up: creating the API key has a small one-time fee, paid from your in-app DIMO balance. If you don't have the app, the [Developer Console](https://console.dimo.org) works too, with a few extra steps.
 - Node.js 20 or newer
-- Claude Code with the Preview capability enabled
 
 ## Install
 
@@ -25,12 +24,18 @@ Setup takes about a minute and happens mostly in the DIMO mobile app. You paste 
 claude plugin marketplace add DIMO-Network/dimo-plugin
 
 # Install the plugin
-claude plugin install dimo
+claude plugin install dimo@dimo-vehicle
 ```
 
 ## Using it
 
 Type `/dimo`, or just ask something like "check my car's battery." The first run walks you through setup. Every run after that goes straight to your data.
+
+## What it doesn't do
+
+Read-only. Locking, unlocking, and charge control ran through an endpoint that is no
+longer in service, so the plugin won't offer them. It can still tell you whether the
+car is locked or charging, if your vehicle reports those signals.
 
 ## How it works under the hood
 

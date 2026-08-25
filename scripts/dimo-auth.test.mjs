@@ -9,6 +9,8 @@ import {
   parseLackedPrivileges,
   privilegesFromSacdMask,
   pruneExpired,
+  vehiclesQuery,
+  vehicleName,
 } from './dimo-auth.mjs';
 
 test('privilegesFromSacdMask decodes 2-bits-per-privilege masks', () => {
@@ -80,4 +82,21 @@ test('isLive requires 60s margin', () => {
   assert.equal(isLive(mk(now + 3600)), true);
   assert.equal(isLive(mk(now + 30)), false);
   assert.equal(isLive(mk(now - 10)), false);
+});
+
+test('vehiclesQuery omits the cursor on the first page and includes it after', () => {
+  const first = vehiclesQuery('0xabc', null);
+  assert.ok(first.includes('privileged: "0xabc"'));
+  assert.ok(first.includes('first: 100)'));
+  assert.ok(!first.includes('after:'));
+  assert.ok(first.includes('totalCount'));
+  assert.ok(first.includes('hasNextPage'));
+  const next = vehiclesQuery('0xabc', 'MTkzMzQ2');
+  assert.ok(next.includes('first: 100, after: "MTkzMzQ2"'));
+});
+
+test('vehicleName joins year/make/model and tolerates missing pieces', () => {
+  assert.equal(vehicleName({ definition: { year: 2025, make: 'Ram', model: '1500' } }), '2025 Ram 1500');
+  assert.equal(vehicleName({ definition: { make: 'Ram' } }), 'Ram');
+  assert.equal(vehicleName({}), '');
 });
